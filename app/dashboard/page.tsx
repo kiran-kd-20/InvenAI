@@ -3,8 +3,10 @@
 import React from 'react';
 import { Search, Calendar } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { useDashboardData } from '../../hooks/useDashboardData';
 
-const salesData = [
+// Fallback data for charts
+const fallbackSalesData = [
   { month: 'Jan', value: 30 },
   { month: 'Feb', value: 25 },
   { month: 'Mar', value: 40 },
@@ -19,7 +21,7 @@ const salesData = [
   { month: 'Dec', value: 75 }
 ];
 
-const pieData = [
+const fallbackPieData = [
   { name: 'Completed', value: 45, color: '#0f766e' },
   { name: 'High Priority', value: 25, color: '#f59e0b' },
   { name: 'Medium Priority', value: 20, color: '#10b981' },
@@ -27,6 +29,49 @@ const pieData = [
 ];
 
 const Dashboard: React.FC = () => {
+  const { data, loading, error } = useDashboardData();
+
+  // Show loading state
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center" style={{ backgroundColor: '#e6fffa' }}>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading dashboard data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error state
+  if (error) {
+    return (
+      <div className="flex min-h-screen items-center justify-center" style={{ backgroundColor: '#e6fffa' }}>
+        <div className="text-center bg-white p-8 rounded-xl shadow-sm">
+          <p className="text-red-600 mb-4">Error loading dashboard: {error}</p>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Use API data or fallback data
+  const salesData = data?.charts?.salesData || fallbackSalesData;
+  const pieData = data?.charts?.orderReport || fallbackPieData;
+  const metrics = data?.metrics || {
+    inventoryValue: '$2,54,000',
+    totalOrders: '2,658',
+    newOrders: '782',
+    delivered: '367'
+  };
+  const orders = data?.orders || [];
+  const products = data?.products || [];
+
   return (
     <div className="flex min-h-screen" style={{ backgroundColor: '#e6fffa' }}>
       {/* Sidebar */}
@@ -158,7 +203,7 @@ const Dashboard: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-600 mb-2">Inventory Value</p>
-                  <p className="text-2xl font-bold text-gray-900 mb-2">$2,54,000</p>
+                  <p className="text-2xl font-bold text-gray-900 mb-2">{metrics.inventoryValue}</p>
                   <div className="flex items-center text-green-600 text-sm">
                     <span>↗</span>
                     <span className="ml-1">3% from last week</span>
@@ -175,7 +220,7 @@ const Dashboard: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-600 mb-2">Total Orders</p>
-                  <p className="text-2xl font-bold text-gray-900 mb-2">2,658</p>
+                  <p className="text-2xl font-bold text-gray-900 mb-2">{metrics.totalOrders}</p>
                   <div className="flex items-center text-green-600 text-sm">
                     <span>↗</span>
                     <span className="ml-1">3% from last week</span>
@@ -192,7 +237,7 @@ const Dashboard: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-600 mb-2">New Orders</p>
-                  <p className="text-2xl font-bold text-gray-900 mb-2">782</p>
+                  <p className="text-2xl font-bold text-gray-900 mb-2">{metrics.newOrders}</p>
                   <div className="flex items-center text-green-600 text-sm">
                     <span>↗</span>
                     <span className="ml-1">3% from last week</span>
@@ -209,7 +254,7 @@ const Dashboard: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-600 mb-2">Delivered</p>
-                  <p className="text-2xl font-bold text-gray-900 mb-2">367</p>
+                  <p className="text-2xl font-bold text-gray-900 mb-2">{metrics.delivered}</p>
                   <div className="flex items-center text-green-600 text-sm">
                     <span>↗</span>
                     <span className="ml-1">3% from last week</span>
@@ -343,26 +388,26 @@ const Dashboard: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-100">
-                  {[1, 2, 3, 4, 5].map((item) => (
-                    <tr key={item} className="hover:bg-gray-50 transition-colors duration-200">
+                  {orders.length > 0 ? orders.slice(0, 5).map((order, index) => (
+                    <tr key={order.id || index} className="hover:bg-gray-50 transition-colors duration-200">
                       <td className="px-6 py-4">
                         <div className="w-10 h-10 bg-orange-500 rounded-full flex items-center justify-center">
-                          <span className="text-white text-sm font-semibold">HH</span>
+                          <span className="text-white text-sm font-semibold">{order.avatar || 'HH'}</span>
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-sm font-medium text-gray-900">Habib Hasan</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">23032011</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">Habib</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">4</td>
-                      <td className="px-6 py-4 text-sm font-semibold text-gray-900">$40</td>
+                      <td className="px-6 py-4 text-sm font-medium text-gray-900">{order.customer || 'Habib Hasan'}</td>
+                      <td className="px-6 py-4 text-sm text-gray-600">{order.orderId || '23032011'}</td>
+                      <td className="px-6 py-4 text-sm text-gray-600">{order.customerName || 'Habib'}</td>
+                      <td className="px-6 py-4 text-sm text-gray-600">{order.quantity || '4'}</td>
+                      <td className="px-6 py-4 text-sm font-semibold text-gray-900">{order.amount || '$40'}</td>
                       <td className="px-6 py-4">
                         <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                          Processed
+                          {order.payment || 'Processed'}
                         </span>
                       </td>
                       <td className="px-6 py-4">
                         <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                          Delivered
+                          {order.status || 'Delivered'}
                         </span>
                       </td>
                       <td className="px-6 py-4">
@@ -376,7 +421,43 @@ const Dashboard: React.FC = () => {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                  )) : (
+                    // Fallback data when API data is not available
+                    [1,2,3,4,5].map((item) => (
+                      <tr key={item} className="hover:bg-gray-50 transition-colors duration-200">
+                        <td className="px-6 py-4">
+                          <div className="w-10 h-10 bg-orange-500 rounded-full flex items-center justify-center">
+                            <span className="text-white text-sm font-semibold">HH</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-sm font-medium text-gray-900">Habib Hasan</td>
+                        <td className="px-6 py-4 text-sm text-gray-600">23032011</td>
+                        <td className="px-6 py-4 text-sm text-gray-600">Habib</td>
+                        <td className="px-6 py-4 text-sm text-gray-600">4</td>
+                        <td className="px-6 py-4 text-sm font-semibold text-gray-900">$40</td>
+                        <td className="px-6 py-4">
+                          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            Processed
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            Delivered
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex space-x-2">
+                            <button className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors duration-200">
+                              <span className="text-blue-600 text-lg">👁</span>
+                            </button>
+                            <button className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors duration-200">
+                              <span className="text-red-600 text-lg">🗑</span>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -401,25 +482,42 @@ const Dashboard: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-100">
-                  {[
-                    { name: "Puma Soft", price: "$53.56", orders: "15", stock: "356" },
-                    { name: "Puma Soft", price: "$53.56", orders: "13", stock: "296" },
-                    { name: "Puma Soft", price: "$53.56", orders: "14", stock: "296" }
-                  ].map((product, index) => (
+                  {products.length > 0 ? products.slice(0, 3).map((product, index) => (
                     <tr key={index} className="hover:bg-gray-50 transition-colors duration-200">
                       <td className="px-6 py-4">
                         <div className="flex items-center space-x-3">
                           <div className="w-10 h-10 bg-gray-200 rounded-lg flex items-center justify-center">
                             <span className="text-lg">📦</span>
                           </div>
-                          <span className="text-sm font-medium text-gray-900">{product.name}</span>
+                          <span className="text-sm font-medium text-gray-900">{product.name || 'Puma Soft'}</span>
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-sm font-semibold text-gray-900">{product.price}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{product.orders}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{product.stock}</td>
+                      <td className="px-6 py-4 text-sm font-semibold text-gray-900">{product.price || '$53.56'}</td>
+                      <td className="px-6 py-4 text-sm text-gray-600">{product.orders || '15'}</td>
+                      <td className="px-6 py-4 text-sm text-gray-600">{product.stock || '356'}</td>
                     </tr>
-                  ))}
+                  )) : (
+                    // Fallback data when API data is not available
+                    [
+                      { name: "Puma Soft", price: "$53.56", orders: "15", stock: "356" },
+                      { name: "Puma Soft", price: "$53.56", orders: "13", stock: "296" },
+                      { name: "Puma Soft", price: "$53.56", orders: "14", stock: "296" }
+                    ].map((product, index) => (
+                      <tr key={index} className="hover:bg-gray-50 transition-colors duration-200">
+                        <td className="px-6 py-4">
+                          <div className="flex items-center space-x-3">
+                            <div className="w-10 h-10 bg-gray-200 rounded-lg flex items-center justify-center">
+                              <span className="text-lg">📦</span>
+                            </div>
+                            <span className="text-sm font-medium text-gray-900">{product.name}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-sm font-semibold text-gray-900">{product.price}</td>
+                        <td className="px-6 py-4 text-sm text-gray-600">{product.orders}</td>
+                        <td className="px-6 py-4 text-sm text-gray-600">{product.stock}</td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>

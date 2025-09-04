@@ -5,10 +5,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     switch (req.method) {
       case 'GET':
-        await handleGetReplenishmentSuggestions(req, res);
+        await handleGetReplenishment(req, res);
         break;
       case 'POST':
-        await handleCreateReplenishmentSuggestions(req, res);
+        await handleCreateReplenishment(req, res);
         break;
       default:
         res.setHeader('Allow', ['GET', 'POST']);
@@ -30,43 +30,52 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
 /**
  * GET /api/replenishment
- * Get existing replenishment suggestions
+ * Analyze products and get replenishment recommendations
+ * Query parameters:
+ * - productId: specific product ID (optional)
+ * - category: product category (optional)
+ * - urgency: low|medium|high|critical (optional)
+ * - autoTrigger: true|false (optional)
  */
-async function handleGetReplenishmentSuggestions(req: NextApiRequest, res: NextApiResponse) {
+async function handleGetReplenishment(req: NextApiRequest, res: NextApiResponse) {
   try {
-    const { productId, urgency } = req.query;
+    const { 
+      productId, 
+      category, 
+      urgency = 'medium',
+      autoTrigger = 'false'
+    } = req.query;
 
-    const input: ReplenishmentInput = {
-      ...(productId && { productId: productId as string }),
-      checkAllProducts: !productId,
+    const replenishmentInput: ReplenishmentInput = {
+      productId: productId as string,
+      category: category as string,
+      urgencyLevel: urgency as 'low' | 'medium' | 'high' | 'critical',
+      autoTrigger: autoTrigger === 'true',
     };
 
-    const suggestions = await ReplenishmentService.generateReplenishmentSuggestions(input);
-
-    // Filter by urgency if specified
-    let filteredSuggestions = suggestions.suggestions;
-    if (urgency) {
-      filteredSuggestions = suggestions.suggestions.filter(
-        s => s.urgencyLevel === urgency.toString().toUpperCase()
-      );
-    }
+    const result = await ReplenishmentService.analyzeReplenishment(replenishmentInput);
 
     return res.status(200).json({
       success: true,
       data: {
-        suggestions: filteredSuggestions,
-        summary: {
-          ...suggestions.summary,
-          filteredCount: filteredSuggestions.length,
+        ...result,
+        metadata: {
+          analysisDate: new Date().toISOString(),
+          urgencyLevel: replenishmentInput.urgencyLevel,
+          autoTriggerEnabled: replenishmentInput.autoTrigger,
+          filters: {
+            productId: replenishmentInput.productId || null,
+            category: replenishmentInput.category || null,
+          },
         },
       },
       error: null,
     });
-  } catch (error: any) {
-    console.error('Get replenishment suggestions error:', error);
+  } catch (error) {
+    console.error('Get replenishment error:', error);
     return res.status(500).json({
       success: false,
-      error: error.message || 'Failed to retrieve replenishment suggestions',
+      error: 'Failed to analyze replenishment needs',
       data: null,
     });
   }
@@ -74,30 +83,35 @@ async function handleGetReplenishmentSuggestions(req: NextApiRequest, res: NextA
 
 /**
  * POST /api/replenishment
- * Generate new replenishment suggestions
+ * Create replenishment analysis with custom parameters
  */
-async function handleCreateReplenishmentSuggestions(req: NextApiRequest, res: NextApiResponse) {
+async function handleCreateReplenishment(req: NextApiRequest, res: NextApiResponse) {
   try {
-    const { productId, checkAllProducts, urgencyThreshold } = req.body;
+    const replenishmentInput: ReplenishmentInput = req.body;
 
-    const input: ReplenishmentInput = {
-      productId,
-      checkAllProducts: checkAllProducts !== false, // Default to true
-      urgencyThreshold,
-    };
+    const result = await ReplenishmentService.analyzeReplenishment(replenishmentInput);
 
-    const result = await ReplenishmentService.generateReplenishmentSuggestions(input);
-
-    return res.status(200).json({
+    return res.status(201).json({
       success: true,
-      data: result,
+      data: {
+        ...result,
+        metadata: {
+          analysisDate: new Date().toISOString(),
+          urgencyLevel: replenishmentInput.urgencyLevel,
+          autoTriggerEnabled: replenishmentInput.autoTrigger,
+          filters: {
+            productId: replenishmentInput.productId || null,
+            category: replenishmentInput.category || null,
+          },
+        },
+      },
       error: null,
     });
-  } catch (error: any) {
-    console.error('Create replenishment suggestions error:', error);
+  } catch (error) {
+    console.error('Create replenishment error:', error);
     return res.status(500).json({
       success: false,
-      error: error.message || 'Failed to generate replenishment suggestions',
+      error: 'Failed to create replenishment analysis',
       data: null,
     });
   }

@@ -19,7 +19,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         });
     }
   } catch (error) {
-    console.error('Recommendations API error:', error);
+    console.error('Product recommendations API error:', error);
     return res.status(500).json({
       success: false,
       error: 'Internal server error',
@@ -31,80 +31,66 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 /**
  * GET /api/recommendations
  * Get product recommendations
+ * Query parameters:
+ * - productId: specific product ID (optional)
+ * - category: product category (optional)
+ * - analysisType: cross_sell|upsell|bundling|new_products|all (optional)
+ * - customerId: customer ID for personalized recommendations (optional)
+ * - timeframe: days to look back for analysis (optional, default 90)
  */
 async function handleGetRecommendations(req: NextApiRequest, res: NextApiResponse) {
   try {
     const { 
       productId, 
       category, 
-      analysisType, 
-      timeframe,
-      type // Filter by recommendation type
+      analysisType = 'all',
+      customerId,
+      timeframe = '90'
     } = req.query;
 
-    const input: RecommendationInput = {
-      ...(productId && { productId: productId as string }),
-      ...(category && { category: category as string }),
-      ...(analysisType && { 
-        analysisType: analysisType as 'cross_sell' | 'upsell' | 'bundling' | 'new_products' | 'all' 
-      }),
-      ...(timeframe && { timeframe: parseInt(timeframe as string) }),
-    };
-
-    const recommendations = await ProductRecommendationService.generateRecommendations(input);
-
-    // Filter by type if specified
-    let filteredGeneral = recommendations.general;
-    if (type) {
-      filteredGeneral = recommendations.general.filter(r => 
-        r.type.toLowerCase() === type.toString().toLowerCase()
-      );
+    // Validate analysis type
+    const validTypes = ['cross_sell', 'upsell', 'bundling', 'new_products', 'all'];
+    if (!validTypes.includes(analysisType as string)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid analysisType. Must be one of: cross_sell, upsell, bundling, new_products, all',
+        data: null,
+      });
     }
 
-    // Format response based on analysis type
-    let responseData: any = {
-      summary: recommendations.summary,
-      meta: {
-        analysisType: input.analysisType || 'all',
-        timeframe: input.timeframe || 90,
-        filters: { productId, category, type },
-      },
+    const recommendationInput: RecommendationInput = {
+      productId: productId as string,
+      category: category as string,
+      analysisType: analysisType as 'cross_sell' | 'upsell' | 'bundling' | 'new_products' | 'all',
+      customerId: customerId as string,
+      orderHistory: true,
+      timeframe: parseInt(timeframe as string) || 90,
     };
 
-    if (!analysisType || analysisType === 'all') {
-      responseData.recommendations = {
-        general: filteredGeneral,
-        crossSell: recommendations.crossSell,
-        bundles: recommendations.bundles,
-        upsell: recommendations.upsell,
-      };
-    } else {
-      switch (analysisType) {
-        case 'cross_sell':
-          responseData.crossSell = recommendations.crossSell;
-          break;
-        case 'bundling':
-          responseData.bundles = recommendations.bundles;
-          break;
-        case 'upsell':
-          responseData.upsell = recommendations.upsell;
-          break;
-        case 'new_products':
-          responseData.general = filteredGeneral;
-          break;
-      }
-    }
+    const recommendations = await ProductRecommendationService.generateRecommendations(recommendationInput);
 
     return res.status(200).json({
       success: true,
-      data: responseData,
+      data: {
+        ...recommendations,
+        metadata: {
+          generatedAt: new Date().toISOString(),
+          analysisType: recommendationInput.analysisType,
+          timeframeDays: recommendationInput.timeframe,
+          filters: {
+            productId: recommendationInput.productId || null,
+            category: recommendationInput.category || null,
+            customerId: recommendationInput.customerId || null,
+          },
+        },
+      },
       error: null,
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Get recommendations error:', error);
     return res.status(500).json({
       success: false,
-      error: error.message || 'Failed to retrieve recommendations',
+      error: 'Failed to generate product recommendations',
       data: null,
     });
   }
@@ -112,78 +98,36 @@ async function handleGetRecommendations(req: NextApiRequest, res: NextApiRespons
 
 /**
  * POST /api/recommendations
- * Generate new product recommendations
+ * Create custom product recommendations
  */
 async function handleCreateRecommendations(req: NextApiRequest, res: NextApiResponse) {
   try {
-    const { productId, category, analysisType, timeframe } = req.body;
+    const recommendationInput: RecommendationInput = req.body;
 
-    // Validate analysis type if provided
-    const validAnalysisTypes = ['cross_sell', 'upsell', 'bundling', 'new_products', 'all'];
-    if (analysisType && !validAnalysisTypes.includes(analysisType)) {
-      return res.status(400).json({
-        success: false,
-        error: `Invalid analysis type. Must be one of: ${validAnalysisTypes.join(', ')}`,
-        data: null,
-      });
-    }
+    const recommendations = await ProductRecommendationService.generateRecommendations(recommendationInput);
 
-    const input: RecommendationInput = {
-      productId,
-      category,
-      analysisType: analysisType || 'all',
-      timeframe: timeframe || 90,
-    };
-
-    const result = await ProductRecommendationService.generateRecommendations(input);
-
-    // Calculate additional insights
-    const insights = {
-      topOpportunities: [
-        ...result.crossSell.map(cs => ({
-          type: 'cross_sell',
-          productId: cs.productId,
-          productName: cs.productName,
-          potential: cs.recommendedProducts.reduce((sum, rp) => sum + rp.revenue_potential, 0),
-        })),
-        ...result.bundles.map(bundle => ({
-          type: 'bundle',
-          bundleId: bundle.bundleId,
-          name: bundle.name,
-          potential: bundle.savings * 10, // Estimate monthly impact
-        })),
-      ].sort((a, b) => b.potential - a.potential).slice(0, 5),
-      
-      crossSellOpportunities: result.crossSell.length,
-      bundleOpportunities: result.bundles.length,
-      upsellOpportunities: result.upsell.length,
-    };
-
-    return res.status(200).json({
+    return res.status(201).json({
       success: true,
       data: {
-        recommendations: {
-          general: result.general,
-          crossSell: result.crossSell,
-          bundles: result.bundles,
-          upsell: result.upsell,
-        },
-        summary: result.summary,
-        insights,
-        meta: {
+        ...recommendations,
+        metadata: {
           generatedAt: new Date().toISOString(),
-          analysisType: input.analysisType,
-          timeframe: input.timeframe,
-          methodology: 'mock_recommendation_v1',
+          analysisType: recommendationInput.analysisType,
+          timeframeDays: recommendationInput.timeframe,
+          filters: {
+            productId: recommendationInput.productId || null,
+            category: recommendationInput.category || null,
+            customerId: recommendationInput.customerId || null,
+          },
         },
       },
       error: null,
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Create recommendations error:', error);
     return res.status(500).json({
       success: false,
-      error: error.message || 'Failed to generate recommendations',
+      error: 'Failed to create product recommendations',
       data: null,
     });
   }
