@@ -1,0 +1,196 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Product Management
+model Product {
+  id          String   @id @default(cuid())
+  sku         String   @unique
+  name        String
+  description String?
+  category    String
+  brand       String?
+  unitPrice   Float
+  costPrice   Float
+  supplier    String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  inventory     Inventory[]
+  sales         Sale[]
+  forecasts     Forecast[]
+  recommendations Recommendation[]
+
+  @@map("products")
+}
+
+// Inventory Management
+model Inventory {
+  id                String   @id @default(cuid())
+  productId         String
+  currentStock      Int
+  reservedStock     Int      @default(0)
+  availableStock    Int // calculated field: currentStock - reservedStock
+  minimumStock      Int      @default(0)
+  maximumStock      Int?
+  reorderPoint      Int      @default(0)
+  reorderQuantity   Int      @default(0)
+  lastStockUpdate   DateTime @default(now())
+  warehouseLocation String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relations
+  product           Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  replenishments    Replenishment[]
+
+  @@map("inventory")
+}
+
+// Sales Data
+model Sale {
+  id           String   @id @default(cuid())
+  productId    String
+  quantity     Int
+  unitPrice    Float
+  totalAmount  Float
+  saleDate     DateTime
+  customerId   String?
+  salesChannel String   @default("online") // online, store, b2b, etc.
+  region       String?
+  seasonality  String?  // Q1, Q2, Q3, Q4, Holiday, etc.
+  createdAt    DateTime @default(now())
+
+  // Relations
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("sales")
+}
+
+// Demand Forecasting
+model Forecast {
+  id                String     @id @default(cuid())
+  productId         String
+  forecastDate      DateTime
+  forecastPeriod    String     // daily, weekly, monthly, quarterly
+  predictedDemand   Float
+  confidence        Float      @default(0.0) // 0-1 confidence score
+  methodology       String     @default("mock") // linear_regression, arima, neural_network, etc.
+  externalFactors   Json?      // weather, holidays, events, etc.
+  actualDemand      Float?     // filled after the forecast period
+  accuracy          Float?     // calculated after actual data is available
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  // Relations
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("forecasts")
+}
+
+// Automated Replenishment
+model Replenishment {
+  id                  String               @id @default(cuid())
+  inventoryId         String
+  productId           String
+  currentStock        Int
+  reorderPoint        Int
+  recommendedQuantity Int
+  urgencyLevel        ReplenishmentUrgency @default(MEDIUM)
+  estimatedLeadTime   Int                  // days
+  costImpact          Float?
+  reason              String               // low_stock, forecast_based, seasonal, etc.
+  status              ReplenishmentStatus  @default(PENDING)
+  orderDate           DateTime?
+  expectedDelivery    DateTime?
+  actualDelivery      DateTime?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+
+  // Relations
+  inventory Inventory @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+
+  @@map("replenishments")
+}
+
+// Stock Optimization & Product Recommendations
+model Recommendation {
+  id              String             @id @default(cuid())
+  productId       String
+  type            RecommendationType
+  priority        RecommendationPriority @default(MEDIUM)
+  title           String
+  description     String
+  actionRequired  String
+  potentialImpact Float?             // revenue impact, cost savings, etc.
+  confidence      Float              @default(0.0) // 0-1 confidence score
+  validUntil      DateTime?
+  isImplemented   Boolean            @default(false)
+  implementedAt   DateTime?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  // Relations
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("recommendations")
+}
+
+// External Factors (for advanced forecasting)
+model ExternalFactor {
+  id          String   @id @default(cuid())
+  factorType  String   // weather, holiday, event, economic, etc.
+  factorName  String
+  date        DateTime
+  value       Float?
+  category    String?
+  impact      String?  // positive, negative, neutral
+  description String?
+  createdAt   DateTime @default(now())
+
+  @@map("external_factors")
+}
+
+// Enums
+enum ReplenishmentUrgency {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum ReplenishmentStatus {
+  PENDING
+  ORDERED
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+enum RecommendationType {
+  OVERSTOCK
+  UNDERSTOCK
+  PRICE_OPTIMIZATION
+  BUNDLE_SUGGESTION
+  SEASONAL_ADJUSTMENT
+  SUPPLIER_CHANGE
+  DEMAND_SPIKE
+  SLOW_MOVING
+}
+
+enum RecommendationPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
